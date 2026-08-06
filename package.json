@@ -1,7 +1,7 @@
 {
   "name": "osaii-worker",
   "private": true,
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "GPL-3.0-only",
   "type": "module",
   "dependencies": {
     "@openai-oauth/ai-sdk": "2.0.0",
