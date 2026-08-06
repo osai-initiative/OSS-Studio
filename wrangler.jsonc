@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "osaii",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-14",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "osaii",
+      "database_id": "f83a97b5-6301-45fe-8821-6393934f6aac"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "STUDIO_FILES", "bucket_name": "osaii-studio" }
+  ],
+  "routes": [
+    {
+      "pattern": "osaii.wyvernhub.net",
+      "custom_domain": true
+    }
+  ],
+  "workers_dev": true,
+  "vars": {
+    "CODEX_ADAPTER_URL": "https://osaii-codex-adapter.netlify.app"
+  }
+}

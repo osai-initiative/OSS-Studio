@@ -1,0 +1,16 @@
+{
+  "name": "osaii-worker",
+  "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@openai-oauth/ai-sdk": "2.0.0",
+    "@openai-oauth/web": "2.0.0",
+    "ai": "6.0.116"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "typescript": "latest",
+    "wrangler": "4.118.0"
+  }
+}
