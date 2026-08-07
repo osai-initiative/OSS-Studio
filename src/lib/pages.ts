@@ -146,6 +146,7 @@ export function layout(body: string, opts: { title: string; active?: string; scr
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="theme-color" content="#000000" />
 <meta name="description" content="OSAII — the Open-Source AI Initiative. We certify whether models are open, and release open models ourselves." />
+<link rel="icon" href="/osaii.png" type="image/png" />
 <title>${opts.title} — OSAII</title>
 <style>${CSS}</style>
 </head>

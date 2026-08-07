@@ -3,6 +3,13 @@
   "name": "osaii",
   "main": "src/index.ts",
   "compatibility_date": "2026-05-14",
+  "rules": [
+    {
+      "type": "Data",
+      "globs": ["**/*.png"],
+      "fallthrough": true
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

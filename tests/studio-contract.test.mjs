@@ -7,9 +7,11 @@ const app = await readFile(new URL("../API/app.ts", import.meta.url), "utf8");
 const studioNew = await readFile(new URL("../API/studio-new.ts", import.meta.url), "utf8");
 const poolside = await readFile(new URL("../API/poolside.ts", import.meta.url), "utf8");
 const worker = await readFile(new URL("../src/index.ts", import.meta.url), "utf8");
+const pages = await readFile(new URL("../src/lib/pages.ts", import.meta.url), "utf8");
 const chatgpt = await readFile(new URL("../API/chatgpt.ts", import.meta.url), "utf8");
 const tokenUsage = await readFile(new URL("../src/lib/token-usage.ts", import.meta.url), "utf8");
 const tokenMigration = await readFile(new URL("../migrations/0006_token_usage.sql", import.meta.url), "utf8");
+const favicon = await readFile(new URL("../osaii.png", import.meta.url));
 
 test("Studio retains the approved centered Chat, Agent, and Swarm shell", () => {
   for (const expected of [
@@ -44,6 +46,17 @@ test("the focused Studio redesign is isolated at /studio/new", () => {
     "height:min(64dvh,540px)",
     "prefers-reduced-motion",
   ]) assert.match(studioNew + app, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("OSAII pages use the supplied PNG favicon without overriding published sites", () => {
+  assert.deepEqual([...favicon.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.match(worker, /import osaiiIcon from "\.\.\/osaii\.png"/);
+  assert.match(worker, /url\.pathname === "\/osaii\.png"/);
+  assert.match(worker, /url\.pathname === "\/favicon\.ico"/);
+  assert.match(worker, /"content-type": "image\/png"/);
+  assert.match(app, /<link rel="icon" href="\/osaii\.png" type="image\/png">/);
+  assert.match(pages, /<link rel="icon" href="\/osaii\.png" type="image\/png" \/>/);
+  assert.doesNotMatch(studio, /studioPreview[\s\S]{0,800}osaii\.png/);
 });
 
 test("Studio chat streams through the Studio gateway with accurate reasoning controls", () => {

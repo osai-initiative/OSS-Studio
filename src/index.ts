@@ -57,6 +57,7 @@ import {
   providerForModel,
   trackTokenResponse,
 } from "./lib/token-usage";
+import osaiiIcon from "../osaii.png";
 
 interface Env {
   DB: D1Database;
@@ -92,6 +93,18 @@ export default {
     const method = request.method;
 
     try {
+      if (
+        method === "GET" &&
+        (url.pathname === "/osaii.png" || url.pathname === "/favicon.ico")
+      )
+        return new Response(osaiiIcon, {
+          headers: {
+            "content-type": "image/png",
+            "cache-control": "public, max-age=86400",
+            "x-content-type-options": "nosniff",
+          },
+        });
+
       if (url.pathname === "/health")
         return json({
           status: "ok",
