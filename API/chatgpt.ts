@@ -395,6 +395,24 @@ async function sdkChatCompletions(request: Request, body: ChatBody): Promise<Res
               {},
               part.finishReason === "tool-calls" ? "tool_calls" : "stop",
             )));
+            controller.enqueue(encodeSse({
+              id: `chatcmpl_${crypto.randomUUID()}`,
+              object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000),
+              model,
+              choices: [],
+              usage: {
+                prompt_tokens: part.totalUsage.inputTokens,
+                completion_tokens: part.totalUsage.outputTokens,
+                total_tokens: part.totalUsage.totalTokens,
+                prompt_tokens_details: {
+                  cached_tokens: part.totalUsage.inputTokenDetails.cacheReadTokens,
+                },
+                completion_tokens_details: {
+                  reasoning_tokens: part.totalUsage.outputTokenDetails.reasoningTokens,
+                },
+              },
+            }));
           } else if (part.type === "error") {
             throw part.error instanceof Error ? part.error : new Error("Codex stream failed.");
           }

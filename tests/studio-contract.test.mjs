@@ -8,6 +8,8 @@ const studioNew = await readFile(new URL("../API/studio-new.ts", import.meta.url
 const poolside = await readFile(new URL("../API/poolside.ts", import.meta.url), "utf8");
 const worker = await readFile(new URL("../src/index.ts", import.meta.url), "utf8");
 const chatgpt = await readFile(new URL("../API/chatgpt.ts", import.meta.url), "utf8");
+const tokenUsage = await readFile(new URL("../src/lib/token-usage.ts", import.meta.url), "utf8");
+const tokenMigration = await readFile(new URL("../migrations/0006_token_usage.sql", import.meta.url), "utf8");
 
 test("Studio retains the approved centered Chat, Agent, and Swarm shell", () => {
   for (const expected of [
@@ -221,6 +223,33 @@ test("completion usage is observable and short reasoning budgets are not blank 2
     "full reasoning budget before producing a final answer",
   ]) assert.match(poolside, new RegExp(expected.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
   assert.match(app, /reasoningBudgetNotice/);
+});
+
+test("provider-reported tokens are durably tracked without retaining content or raw addresses", () => {
+  for (const expected of [
+    "trackTokenResponse",
+    "extractTokenUsage",
+    "prompt_tokens",
+    "input_tokens",
+    "completion_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "reasoning_tokens",
+    "text/event-stream",
+    ".tee()",
+    "ctx.waitUntil",
+    "SHA-256",
+    "token_usage",
+    "usage_reported",
+    "studio_chat",
+    "studio_agent",
+    "studio_swarm",
+    "studio_chatgpt",
+  ]) assert.match(worker + studio + chatgpt + tokenUsage + tokenMigration, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(chatgpt, /part\.totalUsage\.inputTokens/);
+  assert.match(chatgpt, /part\.totalUsage\.outputTokens/);
+  assert.match(app, /TOKENS SERVED · 30 DAYS/);
+  assert.doesNotMatch(tokenMigration, /prompt(?:_text|_body)|response(?:_text|_body)|raw_ip/i);
 });
 
 test("Swarm screens the task once and the final synthesis once", () => {

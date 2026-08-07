@@ -47,7 +47,16 @@ import { appPage } from "../API/app";
 import { oauthCallbackPage } from "../API/app";
 import { studioNewPage } from "../API/studio-new";
 import { chatgptApi } from "../API/chatgpt";
-import { studioApi, studioPreview, trackAnonymousRequest } from "../API/studio";
+import {
+  accountIdForRequest,
+  studioApi,
+  studioPreview,
+  trackAnonymousRequest,
+} from "../API/studio";
+import {
+  providerForModel,
+  trackTokenResponse,
+} from "./lib/token-usage";
 
 interface Env {
   DB: D1Database;
@@ -74,7 +83,11 @@ const HTML_HEADERS = {
 };
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method;
 
@@ -100,16 +113,26 @@ export default {
             request,
             model,
           );
-        if (method === "POST")
+        if (method === "POST") {
+          const response = await poolsideModelRequest(
+            request,
+            env,
+            url.pathname.slice("/api/v1".length),
+          );
           return withRateLimitHeaders(
-            await poolsideModelRequest(
+            trackTokenResponse(response, {
+              db: env.DB,
+              ctx,
               request,
-              env,
-              url.pathname.slice("/api/v1".length),
-            ),
+              surface: "api",
+              provider: providerForModel(model || ""),
+              model: model || "unknown",
+              path: url.pathname,
+            }),
             request,
             model,
           );
+        }
         return withRateLimitHeaders(
           json(
             { error: { message: "Not found.", type: "invalid_request_error" } },
@@ -129,17 +152,34 @@ export default {
         return platformLogin(request, env.DB);
       if (url.pathname === "/studio/api/auth/logout" && method === "POST")
         return platformLogout(request, env.DB);
-      if (url.pathname.startsWith("/studio/api/chatgpt"))
-        return chatgptApi(
+      if (url.pathname.startsWith("/studio/api/chatgpt")) {
+        const path = url.pathname.slice("/studio/api/chatgpt".length) || "/models";
+        const model = await rateLimitModel(request);
+        const response = await chatgptApi(
           request,
           env,
-          url.pathname.slice("/studio/api/chatgpt".length) || "/models",
+          path,
         );
+        if (method !== "POST" || (path !== "/chat/completions" && path !== "/responses")) {
+          return response;
+        }
+        return trackTokenResponse(response, {
+          db: env.DB,
+          ctx,
+          request,
+          accountId: await accountIdForRequest(request, env.DB),
+          surface: "studio_chatgpt",
+          provider: "chatgpt",
+          model: model || "unknown",
+          path: url.pathname,
+        });
+      }
       if (url.pathname.startsWith("/studio/api/"))
         return studioApi(
           request,
           env,
           url.pathname.slice("/studio/api".length),
+          ctx,
         );
       const preview = url.pathname.match(/^\/studio\/site\/([^/]+)\/?(.*)$/);
       if (preview) return studioPreview(request, env, preview[1], preview[2]);

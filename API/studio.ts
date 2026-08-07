@@ -3,6 +3,10 @@ import {
   poolsideModelRequest,
   type PoolsideEnv,
 } from "./poolside";
+import {
+  providerForModel,
+  trackTokenResponse,
+} from "../src/lib/token-usage";
 
 export interface StudioEnv extends PoolsideEnv {
   DB: D1Database;
@@ -30,6 +34,7 @@ export async function studioApi(
   request: Request,
   env: StudioEnv,
   path: string,
+  ctx: ExecutionContext,
 ): Promise<Response> {
   const account = await accountFor(request, env.DB);
   // Studio is authenticated-first: retain the account identity rather than a
@@ -51,10 +56,10 @@ export async function studioApi(
         { error: "sign_in_required", message: "Sign in to use Agent Swarm." },
         401,
       );
-    return studioSwarm(request, env, account);
+    return studioSwarm(request, env, account, ctx);
   }
   if (path === "/chat" && request.method === "POST")
-    return studioChat(request, env, account);
+    return studioChat(request, env, account, ctx);
   if (!account)
     return json(
       {
@@ -270,8 +275,9 @@ async function studioChat(
   request: Request,
   env: StudioEnv,
   account: Account | null,
+  ctx: ExecutionContext,
 ): Promise<Response> {
-  const body = await request
+  const body: { model?: unknown; surface?: unknown; stream?: unknown } = await request
     .clone()
     .json<{ model?: unknown; surface?: unknown }>()
     .catch(() => ({}));
@@ -313,15 +319,25 @@ async function studioChat(
       "chat.request",
       `${model.id}${body && typeof body === "object" && (body as { stream?: unknown }).stream ? " stream" : ""}`,
     );
-  return response;
+  return trackTokenResponse(response, {
+    db: env.DB,
+    ctx,
+    request,
+    accountId: account?.id ?? null,
+    surface: body.surface === "agent" ? "studio_agent" : "studio_chat",
+    provider: providerForModel(model.id),
+    model: model.id,
+    path: "/studio/api/chat",
+  });
 }
 
 async function studioSwarm(
   request: Request,
   env: StudioEnv,
   account: Account,
+  ctx: ExecutionContext,
 ): Promise<Response> {
-  const body = await request
+  const body: { prompt?: unknown } = await request
     .clone()
     .json<{ prompt?: unknown }>()
     .catch(() => ({}));
@@ -377,7 +393,7 @@ async function studioSwarm(
       const index = nextIndex++;
       if (index >= results.length) return;
       try {
-        const response = await poolsideModelRequest(
+        const upstream = await poolsideModelRequest(
           new Request(request.url, {
             method: "POST",
             headers: { "content-type": "application/json", accept: "application/json" },
@@ -396,8 +412,20 @@ async function studioSwarm(
           // through Groq 300 times, and do not screen intermediate findings.
           { safetyAlreadyChecked: true, finalOutputSafety: false, modelAlreadyValidated: true },
         );
+        const response = trackTokenResponse(upstream, {
+          db: env.DB,
+          ctx,
+          request,
+          accountId: account.id,
+          surface: "studio_swarm",
+          provider: "poolside",
+          model: "poolside/laguna-xs-2.1",
+          path: "/studio/api/swarm/research",
+        });
         if (!response.ok) continue;
-        const result = await response.json<{ choices?: Array<{ message?: { content?: unknown } }> }>().catch(() => ({}));
+        const result: { choices?: Array<{ message?: { content?: unknown } }> } = await response
+          .json<{ choices?: Array<{ message?: { content?: unknown } }> }>()
+          .catch(() => ({}));
         const content = result.choices?.[0]?.message?.content;
         if (typeof content === "string") results[index] = content.slice(0, 1_200);
       } catch {
@@ -408,7 +436,7 @@ async function studioSwarm(
   // Keep 300 logical agents while limiting Poolside and Worker concurrency.
   await Promise.all(Array.from({ length: 24 }, () => worker()));
   const findings = results.filter(Boolean);
-  const synthesis = await poolsideModelRequest(
+  const synthesis = trackTokenResponse(await poolsideModelRequest(
     new Request(request.url, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
@@ -426,7 +454,16 @@ async function studioSwarm(
     // The final synthesis is screened explicitly below so the Swarm performs
     // exactly one output check, after all researcher work is complete.
     { safetyAlreadyChecked: true, finalOutputSafety: false, modelAlreadyValidated: true },
-  );
+  ), {
+    db: env.DB,
+    ctx,
+    request,
+    accountId: account.id,
+    surface: "studio_swarm",
+    provider: "poolside",
+    model: "poolside/laguna-s-2.1",
+    path: "/studio/api/swarm/synthesis",
+  });
 
   if (!synthesis.ok) {
     const raw = await synthesis.text();
@@ -990,13 +1027,48 @@ async function deploy(
 }
 
 async function usage(db: D1Database, accountId: number): Promise<Response> {
-  const rows = await db
-    .prepare(
+  const [rows, tokens, byModel] = await Promise.all([
+    db.prepare(
       "SELECT kind,COUNT(*) AS count FROM studio_audit WHERE account_id=? AND created_at>=datetime('now','-30 days') GROUP BY kind",
     )
     .bind(accountId)
-    .all();
-  return json({ period: "30d", usage: rows.results });
+    .all(),
+    db.prepare(
+      `SELECT COUNT(*) AS requests,
+        SUM(usage_reported) AS reported_requests,
+        COALESCE(SUM(prompt_tokens),0) AS prompt_tokens,
+        COALESCE(SUM(completion_tokens),0) AS completion_tokens,
+        COALESCE(SUM(total_tokens),0) AS total_tokens,
+        COALESCE(SUM(cached_tokens),0) AS cached_tokens,
+        COALESCE(SUM(reasoning_tokens),0) AS reasoning_tokens,
+        MIN(created_at) AS tracking_since
+      FROM token_usage
+      WHERE account_id=? AND created_at>=datetime('now','-30 days')`,
+    ).bind(accountId).first<Record<string, number | string | null>>(),
+    db.prepare(
+      `SELECT surface,provider,model,COUNT(*) AS requests,
+        COALESCE(SUM(total_tokens),0) AS total_tokens
+      FROM token_usage
+      WHERE account_id=? AND created_at>=datetime('now','-30 days')
+      GROUP BY surface,provider,model
+      ORDER BY total_tokens DESC`,
+    ).bind(accountId).all(),
+  ]);
+  return json({
+    period: "30d",
+    usage: rows.results,
+    tokens: tokens ?? {
+      requests: 0,
+      reported_requests: 0,
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+      cached_tokens: 0,
+      reasoning_tokens: 0,
+      tracking_since: null,
+    },
+    tokens_by_model: byModel.results,
+  });
 }
 export async function studioPreview(
   _request: Request,
@@ -1043,6 +1115,13 @@ async function accountFor(r: Request, db: D1Database) {
         .bind(t)
         .first<Account>()
     : null;
+}
+
+export async function accountIdForRequest(
+  request: Request,
+  db: D1Database,
+): Promise<number | null> {
+  return (await accountFor(request, db))?.id ?? null;
 }
 async function owned(db: D1Database, accountId: number, id: string) {
   return db
