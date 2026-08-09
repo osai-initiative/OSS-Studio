@@ -2,6 +2,20 @@
 
 OSS Studio is the OSAII chat and agent workspace for Cloudflare Workers. It combines focused Chat, Agent, and Agent Swarm modes with streaming model responses, project storage, agent tools, and optional ChatGPT/Codex access.
 
+## Platform API
+
+Create an OSAII Platform account and named API key at the site root. Keys are shown once,
+stored only as SHA-256 hashes, and can be revoked from the same dialog. Use it with the
+OpenAI-compatible gateway. Anonymous API traffic keeps its current limits; valid OSAII keys
+receive 600 RPM for Laguna XS, 300 RPM for other models, 6,000 requests/hour, and 20,000/day.
+
+```bash
+curl https://osaii.wyvernhub.net/api/v1/models \
+  -H "Authorization: Bearer $OSAII_API_KEY"
+```
+
+Apply `migrations/0007_api_keys.sql` before deploying this feature.
+
 The current focused interface is served at [`/studio/new`](https://osaii.wyvernhub.net/studio/new). The original Studio remains available at [`/studio`](https://osaii.wyvernhub.net/studio).
 
 ## Local development

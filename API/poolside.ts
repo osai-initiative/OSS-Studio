@@ -34,6 +34,10 @@ const XS_RATE_LIMIT_PER_MINUTE = 30;
 const DEFAULT_RATE_LIMIT_PER_MINUTE = 15;
 const RATE_LIMIT_PER_HOUR = 300;
 const RATE_LIMIT_PER_DAY = 1_000;
+const KEYED_XS_RATE_LIMIT_PER_MINUTE = 600;
+const KEYED_DEFAULT_RATE_LIMIT_PER_MINUTE = 300;
+const KEYED_RATE_LIMIT_PER_HOUR = 6_000;
+const KEYED_RATE_LIMIT_PER_DAY = 20_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const HOUR_WINDOW_MS = 60 * RATE_LIMIT_WINDOW_MS;
 const DAY_WINDOW_MS = 24 * HOUR_WINDOW_MS;
@@ -50,15 +54,24 @@ export function apiCorsHeaders(): Record<string, string> {
  * A local backstop for the public API. Studio has an additional persistent
  * D1-backed quota keyed by its verified account or Cloudflare IP hash.
  */
-export function rateLimit(request: Request, model?: string): Response | null {
+export function rateLimit(
+  request: Request,
+  model?: string,
+  accountId?: number | null,
+): Response | null {
   const now = Date.now();
   const client = request.headers.get('cf-connecting-ip') ?? 'unknown';
-  const appRequest = false;
-  const minuteLimit = model === 'poolside/laguna-xs-2.1' ? XS_RATE_LIMIT_PER_MINUTE : DEFAULT_RATE_LIMIT_PER_MINUTE;
+  const keyed = typeof accountId === 'number';
+  const minuteLimit = model === 'poolside/laguna-xs-2.1'
+    ? (keyed ? KEYED_XS_RATE_LIMIT_PER_MINUTE : XS_RATE_LIMIT_PER_MINUTE)
+    : (keyed ? KEYED_DEFAULT_RATE_LIMIT_PER_MINUTE : DEFAULT_RATE_LIMIT_PER_MINUTE);
+  const hourLimit = keyed ? KEYED_RATE_LIMIT_PER_HOUR : RATE_LIMIT_PER_HOUR;
+  const dayLimit = keyed ? KEYED_RATE_LIMIT_PER_DAY : RATE_LIMIT_PER_DAY;
+  const identity = keyed ? `account:${accountId}` : `ip:${client}`;
   const scope = 'api';
-  const minute = incrementWindow(minuteWindows, `${scope}:${client}:${model ?? 'other'}`, now, RATE_LIMIT_WINDOW_MS);
-  const hour = incrementWindow(hourWindows, `${scope}:${client}`, now, HOUR_WINDOW_MS);
-  const day = incrementWindow(dayWindows, `${scope}:${client}`, now, DAY_WINDOW_MS);
+  const minute = incrementWindow(minuteWindows, `${scope}:${identity}:${model ?? 'other'}`, now, RATE_LIMIT_WINDOW_MS);
+  const hour = incrementWindow(hourWindows, `${scope}:${identity}`, now, HOUR_WINDOW_MS);
+  const day = incrementWindow(dayWindows, `${scope}:${identity}`, now, DAY_WINDOW_MS);
 
   // Prevent an unbounded map if many one-off clients hit this Worker isolate.
   if (minuteWindows.size + hourWindows.size + dayWindows.size > 30_000) {
@@ -69,8 +82,8 @@ export function rateLimit(request: Request, model?: string): Response | null {
 
   const breached = [
     { window: minute, limit: minuteLimit, label: 'minute' },
-    { window: hour, limit: RATE_LIMIT_PER_HOUR, label: 'hour' },
-    { window: day, limit: RATE_LIMIT_PER_DAY, label: 'day' },
+    { window: hour, limit: hourLimit, label: 'hour' },
+    { window: day, limit: dayLimit, label: 'day' },
   ].find(({ window, limit }) => window.count > limit);
   if (!breached) return null;
 
@@ -84,25 +97,35 @@ export function rateLimit(request: Request, model?: string): Response | null {
   }), {
     status: 429,
     headers: {
-      ...rateLimitHeaders(minute, minuteLimit, hour, day, RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_DAY),
+      ...rateLimitHeaders(minute, minuteLimit, hour, day, hourLimit, dayLimit),
       'content-type': 'application/json; charset=utf-8',
       'retry-after': String(Math.max(1, Math.ceil((breached.window.resetAt - now) / 1000))),
     },
   });
 }
 
-export function withRateLimitHeaders(response: Response, request: Request, model?: string): Response {
+export function withRateLimitHeaders(
+  response: Response,
+  request: Request,
+  model?: string,
+  accountId?: number | null,
+): Response {
   const client = request.headers.get('cf-connecting-ip') ?? 'unknown';
-  const appRequest = false;
+  const keyed = typeof accountId === 'number';
+  const identity = keyed ? `account:${accountId}` : `ip:${client}`;
   const scope = 'api';
   const modelKey = model ?? 'other';
-  const minuteLimit = modelKey === 'poolside/laguna-xs-2.1' ? XS_RATE_LIMIT_PER_MINUTE : DEFAULT_RATE_LIMIT_PER_MINUTE;
-  const minute = minuteWindows.get(`${scope}:${client}:${modelKey}`);
-  const hour = hourWindows.get(`${scope}:${client}`);
-  const day = dayWindows.get(`${scope}:${client}`);
+  const minuteLimit = modelKey === 'poolside/laguna-xs-2.1'
+    ? (keyed ? KEYED_XS_RATE_LIMIT_PER_MINUTE : XS_RATE_LIMIT_PER_MINUTE)
+    : (keyed ? KEYED_DEFAULT_RATE_LIMIT_PER_MINUTE : DEFAULT_RATE_LIMIT_PER_MINUTE);
+  const hourLimit = keyed ? KEYED_RATE_LIMIT_PER_HOUR : RATE_LIMIT_PER_HOUR;
+  const dayLimit = keyed ? KEYED_RATE_LIMIT_PER_DAY : RATE_LIMIT_PER_DAY;
+  const minute = minuteWindows.get(`${scope}:${identity}:${modelKey}`);
+  const hour = hourWindows.get(`${scope}:${identity}`);
+  const day = dayWindows.get(`${scope}:${identity}`);
   if (!minute || !hour || !day) return response;
   const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(rateLimitHeaders(minute, minuteLimit, hour, day, RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_DAY))) headers.set(key, value);
+  for (const [key, value] of Object.entries(rateLimitHeaders(minute, minuteLimit, hour, day, hourLimit, dayLimit))) headers.set(key, value);
   return new Response(response.body, { status: response.status, headers });
 }
 
@@ -227,6 +250,7 @@ export async function poolsideModelRequest(
   });
   return finalizeModelResponse(upstream, env, options.finalOutputSafety !== false);
 }
+
 
 type SafetyResult = { allowed: boolean; message: string; reason?: string; unavailable?: boolean };
 

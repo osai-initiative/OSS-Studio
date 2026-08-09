@@ -4,13 +4,20 @@ import { readFile } from "node:fs/promises";
 
 const studio = await readFile(new URL("../API/studio.ts", import.meta.url), "utf8");
 const app = await readFile(new URL("../API/app.ts", import.meta.url), "utf8");
-const studioNew = await readFile(new URL("../API/studio-new.ts", import.meta.url), "utf8");
+const studioNext = await readFile(new URL("../API/studio-next.ts", import.meta.url), "utf8");
+const studioPlatform = await readFile(new URL("../API/studio-platform.ts", import.meta.url), "utf8");
+const platformMigration = await readFile(new URL("../migrations/0008_studio_platform.sql", import.meta.url), "utf8");
+const wrangler = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
 const poolside = await readFile(new URL("../API/poolside.ts", import.meta.url), "utf8");
 const worker = await readFile(new URL("../src/index.ts", import.meta.url), "utf8");
 const pages = await readFile(new URL("../src/lib/pages.ts", import.meta.url), "utf8");
 const chatgpt = await readFile(new URL("../API/chatgpt.ts", import.meta.url), "utf8");
 const tokenUsage = await readFile(new URL("../src/lib/token-usage.ts", import.meta.url), "utf8");
 const tokenMigration = await readFile(new URL("../migrations/0006_token_usage.sql", import.meta.url), "utf8");
+const platform = await readFile(new URL("../API/platform.ts", import.meta.url), "utf8");
+const cli = await readFile(new URL("../API/cli.ts", import.meta.url), "utf8");
+const apiKeys = await readFile(new URL("../src/lib/api-keys.ts", import.meta.url), "utf8");
+const keyMigration = await readFile(new URL("../migrations/0007_api_keys.sql", import.meta.url), "utf8");
 const favicon = await readFile(new URL("../osaii.png", import.meta.url));
 
 test("Studio retains the approved centered Chat, Agent, and Swarm shell", () => {
@@ -25,29 +32,6 @@ test("Studio retains the approved centered Chat, Agent, and Swarm shell", () => 
   ]) assert.match(app, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
-test("the focused Studio redesign is isolated at /studio/new", () => {
-  for (const expected of [
-    'url.pathname === "/studio/new"',
-    "studioNewPage()",
-  ]) assert.match(worker, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  for (const expected of [
-    "appPage()",
-    "studio-new",
-    "What are we <em>working on?</em>",
-    "Chat",
-    "Agent",
-    "Agent Swarm",
-    "studio-new-history-backdrop",
-    "Studio tools",
-    "min-width:44px",
-    "font-size:16px",
-    "studio-new-keyboard",
-    "composer.contains(document.activeElement)",
-    "height:min(64dvh,540px)",
-    "prefers-reduced-motion",
-  ]) assert.match(studioNew + app, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-});
-
 test("OSAII pages use the supplied PNG favicon without overriding published sites", () => {
   assert.deepEqual([...favicon.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.match(worker, /import osaiiIcon from "\.\.\/osaii\.png"/);
@@ -57,6 +41,41 @@ test("OSAII pages use the supplied PNG favicon without overriding published site
   assert.match(app, /<link rel="icon" href="\/osaii\.png" type="image\/png">/);
   assert.match(pages, /<link rel="icon" href="\/osaii\.png" type="image\/png" \/>/);
   assert.doesNotMatch(studio, /studioPreview[\s\S]{0,800}osaii\.png/);
+});
+
+test("Platform homepage manages revocable hashed API keys", () => {
+  for (const expected of [
+    "platformPage()",
+    "Create API key",
+    "/platform/api/keys",
+    "OpenAI-compatible",
+    "KEYED_XS_RATE_LIMIT_PER_MINUTE = 600",
+    "KEYED_DEFAULT_RATE_LIMIT_PER_MINUTE = 300",
+    "KEYED_RATE_LIMIT_PER_HOUR = 6_000",
+    "KEYED_RATE_LIMIT_PER_DAY = 20_000",
+    "accountForApiKey",
+    "Authorization: Bearer",
+    "SHA-256",
+    "revoked_at",
+    "last_used_at",
+  ]) assert.match(platform + worker + poolside + apiKeys + keyMigration, new RegExp(expected.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
+  assert.doesNotMatch(keyMigration, /key_secret|raw_key|api_key_value/i);
+});
+
+test("OSAII Code provides an interactive terminal-style coding workspace", () => {
+  for (const expected of [
+    'url.pathname === "/cli"',
+    "cliPage()",
+    "New session",
+    "Workspace",
+    "API key & settings",
+    "sessionStorage",
+    "@ for a file",
+    "text/event-stream",
+    "getReader()",
+    "Ctrl ↵",
+    "Do not claim to run tools or edit files.",
+  ]) assert.match(cli + worker, new RegExp(expected.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
 });
 
 test("Studio chat streams through the Studio gateway with accurate reasoning controls", () => {
@@ -79,9 +98,20 @@ test("Studio chat streams through the Studio gateway with accurate reasoning con
     "selectedModel()",
     "id=\"speed\" aria-label=\"Model family\"",
     "value=\"chatgpt\" id=\"chatgptFamily\"",
+    "value=\"logfare/minimax-m3\">MiniMax M3",
+    "value=\"logfare/deepseek-v4-pro\">DeepSeek V4 Pro",
     "id=\"reasoning\" aria-label=\"Reasoning\"",
     "chatgptSignedIn",
     "ChatGPT / Codex",
+    "modelPickerRepairScript",
+    "chatgptConnect",
+    "Sign in with ChatGPT to choose a model",
+    "Object.getOwnPropertyDescriptor(HTMLOptionElement.prototype,'disabled')",
+    "modelPickerRepairScript",
+    "Sign in with ChatGPT to choose a model",
+    "chatgptConnect",
+    "logfare/minimax-m3",
+    "logfare/deepseek-v4-pro",
     "followStream",
     "Follow live response",
     "stateFollowing",
@@ -138,6 +168,7 @@ test("Studio chat streams through the Studio gateway with accurate reasoning con
     "chatStorages",
     "window.__osaiiUnsavedChats",
   ]) assert.match(app, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(app, /document\.querySelector\('#speed'\)\.textContent=/);
 });
 
 test("Chat and sidebar own independent scroll regions without anchor jumps", () => {
@@ -352,4 +383,85 @@ test("empty cloud and browser workspaces can create their first file", () => {
   ]) assert.match(app, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(studio, /const content = await request\.text\(\)/);
   assert.match(studio, /STUDIO_FILES\.put\(key, content/);
+});
+
+test("the rebuilt standard Studio surface is isolated at /studio/new", () => {
+  for (const expected of [
+    'url.pathname === "/studio/new"',
+    "studioNewPage()",
+    "/studio/new/manifest.webmanifest",
+    "/studio/new/sw.js",
+    "Workspaces & tools",
+    "Search chats",
+    "Chat",
+    "Agent",
+    "Agent Swarm",
+    "Auto",
+  ]) assert.match(worker + studioNext + app, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(worker, /url\.pathname === "\/studio"/);
+});
+
+test("Studio platform state is durable, searchable, controllable, and project-grounded", () => {
+  for (const expected of [
+    "studio_profiles",
+    "studio_memories",
+    "studio_chats",
+    "studio_attachments",
+    "studio_documents",
+    "studio_assistants",
+    "studio_tasks",
+    "studio_notifications",
+    "studio_agent_sessions",
+    "studio_study_progress",
+    "memory/export",
+    "memory/import",
+    "messages LIKE",
+    "project_id",
+    "extracted_text",
+    "autoRemember",
+    "grounding",
+    "mergeSyncedChats",
+  ]) assert.match(studioPlatform + studioNext + platformMigration, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("Studio workspaces provide real research, creation, voice, data, and sharing flows", () => {
+  for (const expected of [
+    "researchReport",
+    "webSearch",
+    "pageExcerpt",
+    "full URLs",
+    "pdf.js",
+    "mammoth",
+    "XLSX",
+    "JSZip",
+    "buildDocx",
+    "buildPptx",
+    "jspdf",
+    "SpeechRecognition",
+    "SpeechSynthesisUtterance",
+    "getUserMedia",
+    "getDisplayMedia",
+    "Attach live frame",
+    "studio_documents",
+    "/studio/share/",
+  ]) assert.match(studioPlatform + studioNext, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("cloud work persists with scheduling, managed agents, notifications, and supervised browser use", () => {
+  for (const expected of [
+    "runScheduledStudioTasks",
+    "ScheduledController",
+    "*/5 * * * *",
+    "runManagedSession",
+    "Architect",
+    "Builder",
+    "Tester",
+    "Reviewer",
+    "confirmation_required",
+    "puppeteer.launch",
+    "env.BROWSER",
+    "Notification.requestPermission",
+    "serviceWorker.register",
+    "control_url",
+  ]) assert.match(studioPlatform + studioNext + worker + wrangler, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });

@@ -3,6 +3,7 @@
   "name": "osaii",
   "main": "src/index.ts",
   "compatibility_date": "2026-05-14",
+  "compatibility_flags": ["nodejs_compat"],
   "rules": [
     {
       "type": "Data",
@@ -20,6 +21,10 @@
   "r2_buckets": [
     { "binding": "STUDIO_FILES", "bucket_name": "osaii-studio" }
   ],
+  "browser": { "binding": "BROWSER" },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
   "routes": [
     {
       "pattern": "osaii.wyvernhub.net",

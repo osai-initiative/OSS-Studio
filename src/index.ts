@@ -45,7 +45,16 @@ import {
 } from "../API/poolside";
 import { appPage } from "../API/app";
 import { oauthCallbackPage } from "../API/app";
-import { studioNewPage } from "../API/studio-new";
+import {
+  studioManifest,
+  studioNewPage,
+  studioServiceWorker,
+} from "../API/studio-next";
+import {
+  runScheduledStudioTasks,
+  sharedStudioItem,
+  studioPlatformApi,
+} from "../API/studio-platform";
 import { chatgptApi } from "../API/chatgpt";
 import {
   accountIdForRequest,
@@ -57,6 +66,14 @@ import {
   providerForModel,
   trackTokenResponse,
 } from "./lib/token-usage";
+import {
+  accountForApiKey,
+  createApiKeyId,
+  createApiKeySecret,
+  hashApiKey,
+} from "./lib/api-keys";
+import { platformPage } from "../API/platform";
+import { cliPage } from "../API/cli";
 import osaiiIcon from "../osaii.png";
 
 interface Env {
@@ -113,18 +130,28 @@ export default {
           region: request.cf?.colo ?? "unknown",
         });
 
+      if (url.pathname.startsWith("/platform/api/"))
+        return platformKeys(
+          request,
+          env.DB,
+          url.pathname.slice("/platform/api".length),
+        );
+
       if (url.pathname.startsWith("/api/v1/")) {
         if (method === "OPTIONS")
           return new Response(null, { status: 204, headers: apiCorsHeaders() });
-        await trackAnonymousRequest(env.DB, request);
+        const apiAccountId = await accountForApiKey(request, env.DB);
+        if (apiAccountId) await trackApiRequest(env.DB, apiAccountId, request);
+        else await trackAnonymousRequest(env.DB, request);
         const model = await rateLimitModel(request);
-        const limited = rateLimit(request, model);
+        const limited = rateLimit(request, model, apiAccountId);
         if (limited) return limited;
         if (method === "GET" && url.pathname === "/api/v1/models")
           return withRateLimitHeaders(
             await poolsideModels(env),
             request,
             model,
+            apiAccountId,
           );
         if (method === "POST") {
           const response = await poolsideModelRequest(
@@ -137,6 +164,7 @@ export default {
               db: env.DB,
               ctx,
               request,
+              accountId: apiAccountId,
               surface: "api",
               provider: providerForModel(model || ""),
               model: model || "unknown",
@@ -144,6 +172,7 @@ export default {
             }),
             request,
             model,
+            apiAccountId,
           );
         }
         return withRateLimitHeaders(
@@ -154,6 +183,7 @@ export default {
           ),
           request,
           model,
+          apiAccountId,
         );
       }
 
@@ -187,6 +217,13 @@ export default {
           path: url.pathname,
         });
       }
+      if (url.pathname.startsWith("/studio/api/platform"))
+        return studioPlatformApi(
+          request,
+          env,
+          url.pathname.slice("/studio/api/platform".length) || "/bootstrap",
+          ctx,
+        );
       if (url.pathname.startsWith("/studio/api/"))
         return studioApi(
           request,
@@ -196,6 +233,8 @@ export default {
         );
       const preview = url.pathname.match(/^\/studio\/site\/([^/]+)\/?(.*)$/);
       if (preview) return studioPreview(request, env, preview[1], preview[2]);
+      const shared = url.pathname.match(/^\/studio\/share\/([a-f0-9]{48})$/);
+      if (shared && method === "GET") return sharedStudioItem(env, shared[1]);
 
       if (method === "GET") {
         if (url.pathname === "/studio/oauth/callback")
@@ -203,8 +242,30 @@ export default {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store",
           });
+        if (url.pathname === "/studio/new/manifest.webmanifest")
+          return new Response(studioManifest(), {
+            headers: {
+              "content-type": "application/manifest+json; charset=utf-8",
+              "cache-control": "public, max-age=3600",
+            },
+          });
+        if (url.pathname === "/studio/new/sw.js")
+          return new Response(studioServiceWorker(), {
+            headers: {
+              "content-type": "text/javascript; charset=utf-8",
+              "cache-control": "no-cache",
+              "service-worker-allowed": "/studio/new",
+            },
+          });
         if (url.pathname === "/studio/new")
           return html(studioNewPage(), {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-store",
+            "permissions-policy":
+              "camera=(self), microphone=(self), display-capture=(self), geolocation=()",
+          });
+        if (url.pathname === "/cli")
+          return html(cliPage(), {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store",
           });
@@ -218,6 +279,11 @@ export default {
           });
         if (url.pathname === "/chat") return redirect("/studio");
         if (url.pathname === "/")
+          return html(platformPage(), {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-store",
+          });
+        if (url.pathname === "/initiative")
           return html(
             layout(homepage(), {
               title: "Open-Source AI Initiative",
@@ -320,6 +386,13 @@ export default {
         500,
       );
     }
+  },
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    await runScheduledStudioTasks(env, ctx);
   },
 };
 
@@ -628,6 +701,90 @@ async function readJson<T>(request: Request): Promise<T> {
   const text = await request.text();
   if (!text) return {} as T;
   return JSON.parse(text) as T;
+}
+
+type PlatformAccount = { id: number; email: string; display_name: string };
+
+async function platformAccount(
+  request: Request,
+  db: D1Database,
+): Promise<PlatformAccount | null> {
+  const token = request.headers
+    .get("cookie")
+    ?.match(/(?:^|;\s*)osaii_platform_session=([^;]+)/)?.[1];
+  if (!token) return null;
+  return db
+    .prepare(
+      "SELECT a.id,a.email,a.display_name FROM platform_sessions s JOIN platform_accounts a ON a.id=s.account_id WHERE s.token=? AND s.expires_at>datetime('now')",
+    )
+    .bind(token)
+    .first<PlatformAccount>();
+}
+
+async function platformKeys(
+  request: Request,
+  db: D1Database,
+  path: string,
+): Promise<Response> {
+  const account = await platformAccount(request, db);
+  if (!account) return json({ error: "sign_in_required" }, 401);
+  if (path === "/keys" && request.method === "GET") {
+    const keys = await db
+      .prepare(
+        "SELECT id,name,prefix,created_at,last_used_at FROM api_keys WHERE account_id=? AND revoked_at IS NULL ORDER BY created_at DESC",
+      )
+      .bind(account.id)
+      .all();
+    return json({ keys: keys.results });
+  }
+  if (path === "/keys" && request.method === "POST") {
+    const body = await readJson<{ name?: unknown }>(request);
+    const name = typeof body.name === "string" ? body.name.trim().slice(0, 80) : "";
+    if (!name) return json({ error: "A key name is required." }, 400);
+    const key = createApiKeySecret();
+    await db
+      .prepare(
+        "INSERT INTO api_keys(id,account_id,name,key_hash,prefix) VALUES(?,?,?,?,?)",
+      )
+      .bind(
+        createApiKeyId(),
+        account.id,
+        name,
+        await hashApiKey(key),
+        key.slice(0, 14),
+      )
+      .run();
+    return json({ key, prefix: key.slice(0, 14) }, 201);
+  }
+  const revoked = path.match(/^\/keys\/([0-9a-f-]{36})$/i);
+  if (revoked && request.method === "DELETE") {
+    await db
+      .prepare(
+        "UPDATE api_keys SET revoked_at=datetime('now') WHERE id=? AND account_id=? AND revoked_at IS NULL",
+      )
+      .bind(revoked[1], account.id)
+      .run();
+    return json({ ok: true });
+  }
+  return json({ error: "not_found" }, 404);
+}
+
+async function trackApiRequest(
+  db: D1Database,
+  accountId: number,
+  request: Request,
+): Promise<void> {
+  await db
+    .prepare(
+      "INSERT INTO request_activity(account_id,surface,method,path) VALUES(?,?,?,?)",
+    )
+    .bind(
+      accountId,
+      "api",
+      request.method,
+      new URL(request.url).pathname.slice(0, 300),
+    )
+    .run();
 }
 
 async function platformSignup(
