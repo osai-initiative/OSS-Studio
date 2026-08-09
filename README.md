@@ -1,6 +1,8 @@
-# OSS Studio
+# OSAII Platform
 
-OSS Studio is the OSAII chat and agent workspace for Cloudflare Workers. It combines focused Chat, Agent, and Agent Swarm modes with streaming model responses, project storage, agent tools, and optional ChatGPT/Codex access.
+OSAII Platform is the umbrella for OSAII products and services. Its API and OSS Studio are separate, symbiotic surfaces: the API is for calling models from code, while Studio is the focused workspace for Chat, Agent, Agent Swarm, projects, tools, and deliverables. They share model access, accounts, safety, and usage.
+
+Use the [Platform home](https://osaii.wyvernhub.net/) to understand the product boundary, then choose the surface that fits the work.
 
 ## Platform API
 
@@ -30,6 +32,10 @@ curl -G https://osaii.wyvernhub.net/api/ask \
 Apply `migrations/0007_api_keys.sql` before deploying this feature.
 
 The current focused interface is served at [`/studio/new`](https://osaii.wyvernhub.net/studio/new). The original Studio remains available at [`/studio`](https://osaii.wyvernhub.net/studio).
+
+### API + Studio
+
+The API and Studio are intentionally separate entry points inside one Platform. Prototype in Studio, then move the same model-backed workflow into `/api/v1` or `/api/ask`; or bring an API-backed service into Studio for inspection and iteration. A Platform account, safety boundary, model catalog, and usage view connect both surfaces.
 
 ## Local development
 

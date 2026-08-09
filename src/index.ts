@@ -273,11 +273,19 @@ export default {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store",
           });
-        if (url.pathname === "/docs")
-          return html(docsPage(), {
+        if (url.pathname === "/docs") {
+          const docs = docsPage()
+            .replaceAll("Docs · OSS Studio", "Docs · OSAII Platform")
+            .replaceAll("<a class=\"brand\" href=\"/\">OSS <i>Studio</i></a>", "<a class=\"brand\" href=\"/\">OSAII <i>Platform</i></a>")
+            .replaceAll("OSS Studio developer docs", "The OSAII Platform · developer docs")
+            .replaceAll("One OpenAI-compatible gateway for Poolside models, Logfare Advanced models, and the focused OSS Studio workspace.", "The Platform connects a separate OpenAI-compatible API with the focused OSS Studio workspace. They share model access, accounts, safety, and usage.")
+            .replaceAll("<h2>OSS Studio</h2><p class=\"section-intro\">", "<h2>Studio: the hands-on side of the Platform</h2><p class=\"section-intro\">")
+            .replaceAll("OSS Studio · <a href=\"/\">Platform</a> · <a href=\"/studio/new\">Studio</a> · <a href=\"/api/v1/models\">Models</a>", "OSAII Platform · <a href=\"/api/v1/models\">API</a> · <a href=\"/studio/new\">Studio</a> · <a href=\"/api/v1/models\">Models</a>");
+          return html(docs, {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "public, max-age=300, stale-while-revalidate=1800",
           });
+        }
         if (
           url.pathname === "/studio" ||
           url.pathname.startsWith("/studio/site/")
@@ -287,11 +295,25 @@ export default {
             "cache-control": "no-store",
           });
         if (url.pathname === "/chat") return redirect("/studio");
-        if (url.pathname === "/")
-          return html(platformPage(), {
+        if (url.pathname === "/") {
+          const umbrella = platformPage()
+            .replaceAll("Open-source AI, ready to build", "The OSAII Platform")
+            .replaceAll("Serious models.<br><em>Open</em> platform.", "One platform.<br><em>Two ways</em> to build.")
+            .replaceAll("OSAII gives builders one OpenAI-compatible endpoint, clear model access, and a workspace for work that needs more than a chat box.", "OSAII Platform brings together the API and OSS Studio. They share models, accounts, safety, and usage while staying separate so you can call AI from code or work directly in a focused workspace.")
+            .replaceAll('href="/studio">Open Studio', 'href="/studio/new">Open Studio')
+            .replaceAll('href="/studio">Studio', 'href="/studio/new">Studio')
+            .replaceAll("<b>One endpoint</b><span>OpenAI-compatible chat and responses</span>", "<b>One platform</b><span>Shared models, accounts, safety, and usage</span>")
+            .replaceAll("<b>Your key</b><span>Named, revocable credentials per account</span>", "<b>Two surfaces</b><span>API for code · Studio for focused work</span>")
+            .replaceAll("<b>Open standard</b><span>Certification and platform, side by side</span>", "<b>Open standard</b><span>Build once, move between both</span>")
+            .replaceAll("Build without translation.", "Choose your way in.")
+            .replaceAll("Start with familiar client code. Choose models, keep credentials under your control.", "API and Studio are distinct products inside one Platform. Start wherever the work starts, then move between them without changing your model access.")
+            .replaceAll("<b>03 / Workspace</b><h3>Move to Studio</h3><p>Use Chat, Agent, Agent Swarm when prompt work becomes project work.</p>", "<b>03 / Symbiotic</b><h3>One Platform, no lock-in</h3><p>The same catalog, safety boundary, account, and usage view connect your first prompt to a production integration.</p>")
+            .replaceAll("Create key, test endpoint, start shipping.", "Create a key for code, or open Studio for hands-on work.");
+          return html(umbrella, {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store",
           });
+        }
         if (url.pathname === "/initiative")
           return html(
             layout(homepage(), {

@@ -63,6 +63,18 @@ test("Platform homepage manages revocable hashed API keys", () => {
   assert.doesNotMatch(keyMigration, /key_secret|raw_key|api_key_value/i);
 });
 
+test("OSAII Platform clearly connects separate API and Studio surfaces", () => {
+  for (const expected of [
+    "One platform.<br><em>Two ways</em> to build.",
+    "API and Studio are distinct products inside one Platform",
+    "href=\"/studio/new\">Open Studio",
+    "The OSAII Platform",
+    "Docs · OSAII Platform",
+    "The Platform connects a separate OpenAI-compatible API",
+  ]) assert.match(worker, new RegExp(expected.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
+  assert.match(platform, /OpenAI-compatible/);
+});
+
 test("OSAII Code provides an interactive terminal-style coding workspace", () => {
   for (const expected of [
     'url.pathname === "/cli"',
