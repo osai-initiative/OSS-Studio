@@ -83,6 +83,11 @@ test("Ask about docs uses a bounded route map and removes unverified links", () 
   }
 });
 
+test("Platform API-key CTAs use a reliable modal handler", () => {
+  assert.match(worker, /function openModal\(\)/);
+  assert.match(worker, /b\.onclick=openModal/);
+});
+
 test("OSAII Code provides an interactive terminal-style coding workspace", () => {
   for (const expected of [
     'url.pathname === "/cli"',

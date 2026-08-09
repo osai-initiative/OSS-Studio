@@ -310,7 +310,9 @@ export default {
             .replaceAll("Build without translation.", "Choose your way in.")
             .replaceAll("Start with familiar client code. Choose models, keep credentials under your control.", "API and Studio are distinct products inside one Platform. Start wherever the work starts, then move between them without changing your model access.")
             .replaceAll("<b>03 / Workspace</b><h3>Move to Studio</h3><p>Use Chat, Agent, Agent Swarm when prompt work becomes project work.</p>", "<b>03 / Symbiotic</b><h3>One Platform, no lock-in</h3><p>The same catalog, safety boundary, account, and usage view connect your first prompt to a production integration.</p>")
-            .replaceAll("Create key, test endpoint, start shipping.", "Create a key for code, or open Studio for hands-on work.");
+            .replaceAll("Create key, test endpoint, start shipping.", "Create a key for code, or open Studio for hands-on work.")
+            .replaceAll("function open(){modal.classList.add('open')", "function openModal(){modal.classList.add('open')")
+            .replaceAll("b.onclick=open);", "b.onclick=openModal);");
           return html(umbrella, {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store",
