@@ -206,6 +206,12 @@ test("Developer docs use the OSS Studio visual system and document the public AP
     "rjson",
     "Kimi K3",
     "Open OSS Studio",
+    "Ask about docs",
+    "hashchange",
+    "classList.toggle('active'",
+    "anonymous requests work immediately",
+    "higher limits",
+    "id=\"docsAsk\"",
   ]) assert.ok(docs.includes(expected) || worker.includes(expected), `missing docs contract: ${expected}`);
 });
 
