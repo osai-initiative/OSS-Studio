@@ -180,6 +180,20 @@ test("Chat and sidebar own independent scroll regions without anchor jumps", () 
   assert.doesNotMatch(app, /el\.scrollIntoView\(\{block:'end'\}\)/);
 });
 
+test("The public ask shortcut supports documented output formats", () => {
+  for (const expected of [
+    'url.pathname === "/api/ask"',
+    "url.searchParams.get(\"q\")",
+    'format === "ccjson"',
+    'format === "rjson"',
+    'headers.set("content-type", "text/plain; charset=utf-8")',
+    'output_text: answer',
+    'fast: "poolside/laguna-xs-2.1"',
+    'smart: "poolside/laguna-s-2.1"',
+    'surface: "api_ask"',
+  ]) assert.ok(worker.includes(expected), `missing ask endpoint contract: ${expected}`);
+});
+
 test("advanced models are server-enforced and only revealed after access check", () => {
   for (const model of ["Kimi K3", "MiniMax M3", "DeepSeek V4 Flash", "DeepSeek V4 Pro"]) {
     assert.match(app, new RegExp(model.replace(/[.*+?^${}()|[\\]\\]/g, "\\\\$&")));

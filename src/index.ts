@@ -130,6 +130,9 @@ export default {
           region: request.cf?.colo ?? "unknown",
         });
 
+      if (url.pathname === "/api/ask" && method === "GET")
+        return askEndpoint(request, env, ctx, url);
+
       if (url.pathname.startsWith("/platform/api/"))
         return platformKeys(
           request,
@@ -420,6 +423,117 @@ function redirect(location: string): Response {
 
 function notFound(): Response {
   return json({ error: "not_found" }, 404);
+}
+
+async function askEndpoint(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  url: URL,
+): Promise<Response> {
+  const query = url.searchParams.get("q")?.trim() ?? "";
+  if (!query)
+    return json(
+      { error: { message: "The q parameter is required.", type: "invalid_request_error", param: "q" } },
+      400,
+      apiCorsHeaders(),
+    );
+  if (query.length > 100_000)
+    return json(
+      { error: { message: "The q parameter is too long (maximum 100,000 characters).", type: "invalid_request_error", param: "q" } },
+      400,
+      apiCorsHeaders(),
+    );
+
+  const aliases: Record<string, string> = {
+    fast: "poolside/laguna-xs-2.1",
+    smart: "poolside/laguna-s-2.1",
+  };
+  const requestedModel = url.searchParams.get("model")?.trim() || "fast";
+  const model = aliases[requestedModel.toLowerCase()] || requestedModel;
+  const format = (url.searchParams.get("format")?.trim().toLowerCase() || "text");
+  if (!["json", "ccjson", "rjson", "text"].includes(format))
+    return json(
+      { error: { message: "format must be one of json, ccjson, rjson, or text.", type: "invalid_request_error", param: "format" } },
+      400,
+      apiCorsHeaders(),
+    );
+
+  const accountId = await accountForApiKey(request, env.DB);
+  if (accountId) await trackApiRequest(env.DB, accountId, request);
+  else await trackAnonymousRequest(env.DB, request);
+  const limited = rateLimit(request, model, accountId);
+  if (limited) return limited;
+
+  const upstreamRequest = new Request(new URL("/api/v1/chat/completions", request.url), {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: query }],
+      stream: false,
+    }),
+  });
+  let response = await poolsideModelRequest(upstreamRequest, env, "/chat/completions");
+  response = trackTokenResponse(response, {
+    db: env.DB,
+    ctx,
+    request,
+    accountId,
+    surface: "api_ask",
+    provider: providerForModel(model),
+    model,
+    path: "/api/ask",
+  });
+  response = withRateLimitHeaders(response, request, model, accountId);
+  if (!response.ok || format === "ccjson") return response;
+
+  const payload = await response.clone().json().catch(() => null) as Record<string, unknown> | null;
+  const answer = askText(payload);
+  if (format === "text") {
+    const headers = new Headers(response.headers);
+    headers.set("content-type", "text/plain; charset=utf-8");
+    return new Response(answer, { status: response.status, headers });
+  }
+  const headers = new Headers(response.headers);
+  headers.set("content-type", "application/json; charset=utf-8");
+  if (format === "rjson") {
+    const responseId = typeof payload?.id === "string" ? payload.id : `resp_${crypto.randomUUID().replaceAll("-", "")}`;
+    return new Response(JSON.stringify({
+      id: responseId,
+      object: "response",
+      created_at: typeof payload?.created === "number" ? payload.created : Math.floor(Date.now() / 1000),
+      model,
+      output: [{
+        id: `${responseId}_msg`,
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text: answer, annotations: [] }],
+      }],
+      output_text: answer,
+      status: "completed",
+      usage: payload?.usage ?? null,
+    }), { status: response.status, headers });
+  }
+  return new Response(JSON.stringify({ answer, text: answer, model, usage: payload?.usage ?? null }), {
+    status: response.status,
+    headers,
+  });
+}
+
+function askText(payload: Record<string, unknown> | null): string {
+  const choices = Array.isArray(payload?.choices) ? payload.choices : [];
+  const first = choices[0] && typeof choices[0] === "object" ? choices[0] as Record<string, unknown> : null;
+  const message = first?.message && typeof first.message === "object" ? first.message as Record<string, unknown> : null;
+  const content = message?.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) return content.map((part) => {
+    if (typeof part === "string") return part;
+    if (part && typeof part === "object") return String((part as Record<string, unknown>).text ?? (part as Record<string, unknown>).content ?? "");
+    return "";
+  }).join("");
+  return typeof payload?.output_text === "string" ? payload.output_text : "";
 }
 
 function isEmail(value: string): boolean {
