@@ -74,6 +74,7 @@ import {
 } from "./lib/api-keys";
 import { platformPage } from "../API/platform";
 import { cliPage } from "../API/cli";
+import { docsPage } from "../API/docs";
 import osaiiIcon from "../osaii.png";
 
 interface Env {
@@ -271,6 +272,11 @@ export default {
           return html(cliPage(), {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store",
+          });
+        if (url.pathname === "/docs")
+          return html(docsPage(), {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "public, max-age=300, stale-while-revalidate=1800",
           });
         if (
           url.pathname === "/studio" ||

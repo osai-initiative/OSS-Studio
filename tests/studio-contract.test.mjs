@@ -17,6 +17,7 @@ const tokenMigration = await readFile(new URL("../migrations/0006_token_usage.sq
 const platform = await readFile(new URL("../API/platform.ts", import.meta.url), "utf8");
 const cli = await readFile(new URL("../API/cli.ts", import.meta.url), "utf8");
 const apiKeys = await readFile(new URL("../src/lib/api-keys.ts", import.meta.url), "utf8");
+const docs = await readFile(new URL("../API/docs.ts", import.meta.url), "utf8");
 const keyMigration = await readFile(new URL("../migrations/0007_api_keys.sql", import.meta.url), "utf8");
 const favicon = await readFile(new URL("../osaii.png", import.meta.url));
 
@@ -192,6 +193,20 @@ test("The public ask shortcut supports documented output formats", () => {
     'smart: "poolside/laguna-s-2.1"',
     'surface: "api_ask"',
   ]) assert.ok(worker.includes(expected), `missing ask endpoint contract: ${expected}`);
+});
+
+test("Developer docs use the OSS Studio visual system and document the public API", () => {
+  for (const expected of [
+    'url.pathname === "/docs"',
+    "docsPage()",
+    "OpenAI-compatible",
+    "/api/ask?q=...",
+    "/api/v1/chat/completions",
+    "ccjson",
+    "rjson",
+    "Kimi K3",
+    "Open OSS Studio",
+  ]) assert.ok(docs.includes(expected) || worker.includes(expected), `missing docs contract: ${expected}`);
 });
 
 test("advanced models are server-enforced and only revealed after access check", () => {
