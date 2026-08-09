@@ -312,7 +312,8 @@ export default {
             .replaceAll("<b>03 / Workspace</b><h3>Move to Studio</h3><p>Use Chat, Agent, Agent Swarm when prompt work becomes project work.</p>", "<b>03 / Symbiotic</b><h3>One Platform, no lock-in</h3><p>The same catalog, safety boundary, account, and usage view connect your first prompt to a production integration.</p>")
             .replaceAll("Create key, test endpoint, start shipping.", "Create a key for code, or open Studio for hands-on work.")
             .replaceAll("function open(){modal.classList.add('open')", "function openModal(){modal.classList.add('open')")
-            .replaceAll("b.onclick=open);", "b.onclick=openModal);");
+            .replaceAll("b.onclick=open);", "b.onclick=openModal);")
+            .replace("</body>", "<script>for(const id of ['accountButton','heroKey','stripKey']){const button=document.getElementById(id);if(button)button.addEventListener('click',()=>document.getElementById('modal')?.classList.add('open'))}</script></body>");
           return html(umbrella, {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store",
