@@ -280,7 +280,9 @@ export default {
             .replaceAll("OSS Studio developer docs", "The OSAII Platform · developer docs")
             .replaceAll("One OpenAI-compatible gateway for Poolside models, Logfare Advanced models, and the focused OSS Studio workspace.", "The Platform connects a separate OpenAI-compatible API with the focused OSS Studio workspace. They share model access, accounts, safety, and usage.")
             .replaceAll("<h2>OSS Studio</h2><p class=\"section-intro\">", "<h2>Studio: the hands-on side of the Platform</h2><p class=\"section-intro\">")
-            .replaceAll("OSS Studio · <a href=\"/\">Platform</a> · <a href=\"/studio/new\">Studio</a> · <a href=\"/api/v1/models\">Models</a>", "OSAII Platform · <a href=\"/api/v1/models\">API</a> · <a href=\"/studio/new\">Studio</a> · <a href=\"/api/v1/models\">Models</a>");
+            .replaceAll("OSS Studio · <a href=\"/\">Platform</a> · <a href=\"/studio/new\">Studio</a> · <a href=\"/api/v1/models\">Models</a>", "OSAII Platform · <a href=\"/api/v1/models\">API</a> · <a href=\"/studio/new\">Studio</a> · <a href=\"/api/v1/models\">Models</a>")
+            .replaceAll("q:'Answer using only the OSS Studio docs. Question: '+q", "q:'Answer only from the OSAII Platform docs below. Never invent URLs, endpoints, model IDs, or capabilities. If the docs do not contain the answer, say so. Known routes: /, /docs, /api/ask, /api/v1/chat/completions, /api/v1/responses, /api/v1/models, /studio/new. Question: '+q")
+            .replaceAll("answer.textContent=text", "answer.textContent=text.replace(/https?:\\/\\/[^\\s)]+/g,url=>{try{const u=new URL(url);const allowed=u.hostname==='osaii.wyvernhub.net'&&['/','/docs','/api/ask','/api/v1/chat/completions','/api/v1/responses','/api/v1/models','/studio/new'].includes(u.pathname);return allowed?url:'[unverified link omitted]'}catch{return '[unverified link omitted]'}})");
           return html(docs, {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "public, max-age=300, stale-while-revalidate=1800",

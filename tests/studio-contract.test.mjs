@@ -75,6 +75,14 @@ test("OSAII Platform clearly connects separate API and Studio surfaces", () => {
   assert.match(platform, /OpenAI-compatible/);
 });
 
+test("Ask about docs uses a bounded route map and removes unverified links", () => {
+  assert.match(worker, /Never invent URLs, endpoints, model IDs, or capabilities/);
+  assert.match(worker, /unverified link omitted/);
+  for (const route of ["/docs", "/api/ask", "/api/v1/models", "/studio/new"]) {
+    assert.match(worker, new RegExp(route.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
+  }
+});
+
 test("OSAII Code provides an interactive terminal-style coding workspace", () => {
   for (const expected of [
     'url.pathname === "/cli"',
