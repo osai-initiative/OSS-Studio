@@ -14,6 +14,19 @@ curl https://osaii.wyvernhub.net/api/v1/models \
   -H "Authorization: Bearer $OSAII_API_KEY"
 ```
 
+For a simple GET request, use `/api/ask`. `q` is required; `model` defaults to
+`fast` and also accepts `smart` or an exact catalog model ID. `format` defaults
+to raw `text` and may be `json`, `ccjson` (Chat Completions JSON), or `rjson`
+(Responses-style JSON).
+
+```bash
+curl -G https://osaii.wyvernhub.net/api/ask \
+  -H "Authorization: Bearer $OSAII_API_KEY" \
+  --data-urlencode 'q=Explain the observer pattern in one paragraph' \
+  --data-urlencode 'model=smart' \
+  --data-urlencode 'format=text'
+```
+
 Apply `migrations/0007_api_keys.sql` before deploying this feature.
 
 The current focused interface is served at [`/studio/new`](https://osaii.wyvernhub.net/studio/new). The original Studio remains available at [`/studio`](https://osaii.wyvernhub.net/studio).
