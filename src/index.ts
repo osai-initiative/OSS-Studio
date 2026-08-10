@@ -75,6 +75,7 @@ import {
 import { platformPage } from "../API/platform";
 import { cliPage } from "../API/cli";
 import { docsPage } from "../API/docs";
+import { getSemanticCache, putSemanticCache } from "./lib/semantic-cache";
 import osaiiIcon from "../osaii.png";
 
 interface Env {
@@ -498,6 +499,18 @@ async function askEndpoint(
   const limited = rateLimit(request, model, accountId);
   if (limited) return limited;
 
+  // Fast mode uses a short-lived semantic cache for recurring, non-personal
+  // questions. Rate limits still apply; cached answers are never used for
+  // Smart, Advanced, or provider-specific requests.
+  if (model === "poolside/laguna-xs-2.1") {
+    const cached = getSemanticCache(model, query);
+    if (cached) {
+      const cachedResponse = cachedAskResponse(cached, model, format);
+      cachedResponse.headers.set("x-osaii-cache", "semantic-hit");
+      return withRateLimitHeaders(cachedResponse, request, model, accountId);
+    }
+  }
+
   const upstreamRequest = new Request(new URL("/api/v1/chat/completions", request.url), {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
@@ -523,6 +536,7 @@ async function askEndpoint(
 
   const payload = await response.clone().json().catch(() => null) as Record<string, unknown> | null;
   const answer = askText(payload);
+  if (model === "poolside/laguna-xs-2.1" && response.ok) putSemanticCache(model, query, answer);
   if (format === "text") {
     const headers = new Headers(response.headers);
     headers.set("content-type", "text/plain; charset=utf-8");
@@ -553,6 +567,26 @@ async function askEndpoint(
     status: response.status,
     headers,
   });
+}
+
+function cachedAskResponse(answer: string, model: string, format: string): Response {
+  const headers = new Headers({ "cache-control": "no-store" });
+  if (format === "text") {
+    headers.set("content-type", "text/plain; charset=utf-8");
+    return new Response(answer, { headers });
+  }
+  headers.set("content-type", "application/json; charset=utf-8");
+  if (format === "ccjson") return new Response(JSON.stringify({
+    id: `chatcmpl_cache_${crypto.randomUUID().replaceAll("-", "")}`,
+    object: "chat.completion", created: Math.floor(Date.now() / 1000), model,
+    choices: [{ index: 0, message: { role: "assistant", content: answer }, finish_reason: "stop" }],
+  }), { headers });
+  if (format === "rjson") return new Response(JSON.stringify({
+    id: `resp_cache_${crypto.randomUUID().replaceAll("-", "")}`,
+    object: "response", created_at: Math.floor(Date.now() / 1000), model,
+    output_text: answer, output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: answer, annotations: [] }] }], status: "completed",
+  }), { headers });
+  return new Response(JSON.stringify({ answer, text: answer, model, cached: true }), { headers });
 }
 
 function askText(payload: Record<string, unknown> | null): string {
